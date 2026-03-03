@@ -92,10 +92,10 @@ jobs:
           name: python-package-distributions
           path: dist/
 
-      - name: Publish to TestPyPI
-        if: needs.validate.outputs.is-prerelease == 'true'
-        run: uv publish --index testpypi
+      # - name: Publish to TestPyPI
+      #   if: needs.validate.outputs.is-prerelease == 'true'
+      #   run: uv publish --index testpypi
 
-      - name: Publish to PyPI
-        if: needs.validate.outputs.is-prerelease == 'false'
-        run: uv publish
+      # - name: Publish to PyPI
+      #   if: needs.validate.outputs.is-prerelease == 'false'
+      #   run: uv publish
