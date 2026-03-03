@@ -1002,7 +1002,7 @@ wheels = [
 
 [[package]]
 name = "dioptra-test"
-version = "1.2.0.dev3"
+version = "1.2.0.dev4"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
