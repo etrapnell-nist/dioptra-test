@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dioptra-platform"
-version = "1.2.0dev0"
+version = "1.2.0dev1"
 authors = [
     { name="Harold Booth", email="harold.booth@nist.gov" },
     { name="James Glasbrenner", email="jglasbrenner@mitre.org" },
