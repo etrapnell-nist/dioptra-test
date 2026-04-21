@@ -36,7 +36,7 @@
           </span>
           <q-icon 
             v-if="col.sortable"
-            :name="getSortIcon(col.field)"
+            :name="getSortIcon(col.name)"
             class="sort-icon"
           />
         </q-th>
@@ -210,7 +210,9 @@
 </template>
 
 <script setup>
-  import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { useRoute } from 'vue-router'
+  import { useLoginStore } from '@/stores/LoginStore'
   import { useQuasar } from 'quasar'
   import * as notify from '../notify'
 
@@ -230,6 +232,7 @@
   showAll: Boolean,
   highlightRow: Boolean,
   selection: String,
+  loading: Boolean,
   disabledRowKeys: {
     type: Array,
     default: []
@@ -249,6 +252,10 @@
   defaultSort: {
     type: Object,
     default: { sortBy: 'lastModifiedOn', descending: true }
+  },
+  preserveSort: {
+    type: Boolean,
+    default: true
   }
 })
   const emit = defineEmits([
@@ -287,6 +294,8 @@
   })
 
   const $q = useQuasar()
+  const route = useRoute()
+  const loginStore = useLoginStore()
 
   const darkMode = computed(() => {
     if($q.dark.mode === 'auto') {
@@ -344,6 +353,18 @@
     if(newVal !== oldVal) selected.value = []
   })
 
+  watch(() => props.loading, async (newVal) => {
+    if(!newVal) {
+      await nextTick()
+      // after loading, scroll to saved position
+      if(route.meta.backButton && loginStore.tablePaginationCache[route.path]) {
+        window.scrollTo({
+          top: loginStore.tablePaginationCache[route.path].lastScrollPosition,
+        })
+      }
+    }
+  })
+
   function getSelectedColor(selected) {
     if (!props.highlightSelection) return
     if(darkMode.value && selected) return 'bg-deep-purple-10'
@@ -359,7 +380,17 @@
 
   const tableRef = ref()
   onMounted(() => {
-    // get initial data from server (1st page)
+    // Restore cached pagination when arriving via back; otherwise use defaults
+    const key = route.path
+    const cached = loginStore.tablePaginationCache[key]
+    if (route.meta.backButton && cached) {
+      pagination.value = { ...pagination.value, ...cached }
+      showDeleted.value = cached.showDeleted
+      filter.value = cached.search
+    } else if(cached) {
+      delete loginStore.tablePaginationCache[key]
+    }
+    // get initial data from server with current pagination
     tableRef.value.requestServerInteraction()
   })
 
@@ -432,8 +463,23 @@
     return ''
   }
 
+  const path = route.path
+
   onBeforeUnmount(() => {
     invalidSearchNotification()
+
+    // cache current pagination keyed by route path
+    if(props.preserveSort) {
+      loginStore.tablePaginationCache[path] = {
+        page: pagination.value.page,
+        rowsPerPage: pagination.value.rowsPerPage,
+        sortBy: pagination.value.sortBy,
+        descending: pagination.value.descending,
+        showDeleted: props.showDeleted,
+        search: filter.value,
+        lastScrollPosition: window.scrollY
+      }
+    }
   })
 
   function updateTotalRows(totalRows) {

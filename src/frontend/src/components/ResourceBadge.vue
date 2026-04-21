@@ -146,7 +146,12 @@ function openResource(event) {
     return
   }
 
-  router.push(formattedUrl.value)
+  const r = router.resolve(formattedUrl.value)
+  router.push({
+    path: r.path,
+    query: { ...r.query },
+    state: { viaBadgeLink: true }
+  })
 }
 </script>
 

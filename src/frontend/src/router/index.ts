@@ -5,6 +5,10 @@ import * as api from '@/services/dataApi'
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, from, savedPosition) {
+    // always scroll to top
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/',
@@ -13,22 +17,20 @@ const router = createRouter({
     },
     {
       path: '/experiments',
+      meta: { type: 'experiments' },
       children: [
         {
           path: '',
           component: () => import('../views/ExperimentsView.vue'),
-          meta: { type: 'experiments' },
           name: 'experiments',
         },
         {
           path: '/experiments/new',
           component: () => import('../views/CreateExperiment.vue'),
-          meta: { type: 'experiments' }
         },
         {
           path: '/experiments/:id',
           component: () => import('../views/EditExperiment.vue'),
-          meta: { type: 'experiments' },
           name: 'experimentJobs'
         },
         {
@@ -40,6 +42,7 @@ const router = createRouter({
     },
     {
       path: '/entrypoints',
+      meta: { type: 'entrypoints' },
       children: [
         {
           path: '',
@@ -49,12 +52,12 @@ const router = createRouter({
         {
           path: '/entrypoints/:id',
           component: () => import('../views/CreateEntryPoint.vue'),
-          meta: { type: 'entrypoints' }
         },
       ]
     },
     {
       path: '/plugins',
+      meta: { type: 'plugins' },
       children: [
         {
           path: '',
@@ -64,7 +67,6 @@ const router = createRouter({
         {
           path: '/plugins/new',
           component: () => import('../views/CreatePluginView.vue'),
-          meta: { type: 'plugins' }
         },
         {
           path: '/plugins/:id',
@@ -80,6 +82,7 @@ const router = createRouter({
     },
     {
       path: '/queues',
+      meta: { type: 'queues' },
       children: [
         {
           path: '',
@@ -89,17 +92,16 @@ const router = createRouter({
         {
           path: '/queues/:id/:draftType/:newResourceDraft?',
           component: () => import('../views/QueuesFormDraftView.vue'),
-          meta: { type: 'queues' }
         },
         {
           path: '/queues/:id',
           component: () => import('../views/QueuesFormView.vue'),
-          meta: { type: 'queues' }
         },
       ]
     },
     {
       path: '/jobs',
+      meta: { type: 'jobs' },
       children: [
         {
           path: '',
@@ -112,7 +114,8 @@ const router = createRouter({
         },
         {
           path: '/jobs/:id',
-          component: () => import('../views/JobDashboardView.vue')
+          component: () => import('../views/JobDashboardView.vue'),
+          name: 'jobDashboard'
         },
       ]
     },
@@ -131,6 +134,7 @@ const router = createRouter({
     },
     {
       path: '/pluginParams',
+      meta: { type: 'pluginParams' },
       children: [
         {
           path: '',
@@ -151,17 +155,16 @@ const router = createRouter({
     },
     {
       path: '/artifacts',
+      meta: { type: 'artifacts' },
       children: [
         {
           path: '/artifacts',
           component: () => import('../views/ArtifactsView.vue'),
           name: 'artifacts',
-          meta: { type: 'artifacts' }
         },
         {
           path: '/artifacts/:id',
           component: () => import('../views/EditArtifactView.vue'),
-          meta: { type: 'artifacts' }
         },
       ]
     },
@@ -216,6 +219,29 @@ async function callGetLoginStatus() {
     store.loggedInUser = ''
   }
 }
+
+router.afterEach((to, from) => {
+  // remember pagination when clicking into a resource then going back to the table
+  const backButton = window.event?.type === 'popstate'
+  const backToSameType = to.meta?.type === from.meta?.type
+  const jobBackToExperiment = to.name === 'experimentJobs' && from.name === 'jobDashboard'
+  const viaBadgeLink = window.history.state?.viaBadgeLink === true
+  if (viaBadgeLink) {
+    to.meta.viaBadgeLink = true
+  }
+  if(backButton && (backToSameType || jobBackToExperiment || from.meta?.viaBadgeLink)) {
+    to.meta.backButton = true
+  }
+
+  // ensure only to and from pagination settings are stored
+  const store = useLoginStore()
+  const keep = new Set<string>([to.path, from.path])
+  Object.keys(store.tablePaginationCache).forEach((k) => {
+    if (!keep.has(k)) {
+      delete (store.tablePaginationCache as any)[k]
+    }
+  })
+})
 
 
 export default router

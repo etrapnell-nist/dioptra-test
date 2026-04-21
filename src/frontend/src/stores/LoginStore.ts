@@ -51,10 +51,20 @@ export const useLoginStore = defineStore('login', () => {
 
   const initialPage = ref(false)
 
+  // cache table pagination by route path (in-memory; resets on refresh)
+  const tablePaginationCache = ref<Record<string, {
+    page: number
+    rowsPerPage: number
+    sortBy?: string
+    descending?: boolean
+    lastScrollPosition?: number,
+    search?: string
+  }>>({})
+
   // computed()'s are getters
 
   // function()'s are actions
   
 
-  return { loggedInUser, loggedInGroup, groups, users, savedForms, showRightDrawer, selectedSnapshot, triggerPopup, initialPage };
+  return { loggedInUser, loggedInGroup, groups, users, savedForms, showRightDrawer, selectedSnapshot, triggerPopup, initialPage, tablePaginationCache };
 })
