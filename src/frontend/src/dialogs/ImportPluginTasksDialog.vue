@@ -1,8 +1,8 @@
 <template>
-  <q-dialog v-model="showDialog">
+  <q-dialog v-model="showDialog" @show="onDialogShow">
     <q-card style="display: inline-block; width: auto; max-width: 800px;">
       <q-card-section class="bg-primary text-white text-h6">
-        Import Plugin Tasks
+        Import Plugin Function Tasks
       </q-card-section>
 
       <q-card-section style="max-height: 75vh" class="scroll">
@@ -29,6 +29,7 @@
           v-model:selected="selectedTasks"
           selection="multiple"
           row-key="name"
+          :loading="loading"
         >
           <template #body-cell-name="props">
             <div style="font-size: 18px;">
@@ -42,7 +43,7 @@
             </div>
           </template>
           <template #body-cell-inputParams="props">
-            <div class="column items-end fit q-mt-sm">
+            <div class="column items-end">
               <q-chip
                 v-for="(param, i) in props.row.inputParams"
                 :key="i"
@@ -59,12 +60,13 @@
                 dense
                 color="orange"
                 text-color="white"
+                square
                 label="No params listed"
               />
             </div>
           </template>
           <template #body-cell-outputParams="props">
-            <div class="column items-end fit q-mt-sm">
+            <div class="column items-end">
               <q-chip
                 v-for="(param, i) in props.row.outputParams"
                 :key="i"
@@ -78,6 +80,7 @@
                 dense
                 color="orange"
                 text-color="white"
+                square
                 label="No params listed"
               />
             </div>
@@ -89,50 +92,57 @@
             />
           </template>
           <template #expandedSlot="{ row, rowProps }">
-            <div class="row" v-if="Object.hasOwn(dupliateIdenticalTasks, row.name)" @vue:mounted="expandRow(row, rowProps)">
-              Duplicate task with identical params already exist in your plugin file.
-            </div>
-            <div v-if="Object.hasOwn(dupliateTasksWithDifferentParams, row.name)" @vue:mounted="expandRow(row, rowProps)">
-              <div class="row">
-                Duplicate task.  Importing will overwrite the existing params below.
+            <div @click="rowProps.selected = !rowProps.selected" style="cursor: pointer;">
+              <div class="row" v-if="Object.hasOwn(dupliateIdenticalTasks, row.name)" @vue:mounted="expandRow(row, rowProps)">
+                Duplicate task with identical params already exist in your plugin file.
               </div>
-              <div class="row justify-end">
-                <div class="column items-end">
-                  <q-chip
-                    v-for="(param, i) in dupliateTasksWithDifferentParams[row.name].inputParams"
-                    :key="i"
-                    color="indigo"
-                    text-color="white"
-                    dense
-                  >
-                    {{ `${param.name}` }}
-                    <span v-if="param.required" class="text-red">*</span>
-                    {{ `: ${param.type}` }}
-                  </q-chip>
-                  <q-chip
-                    v-if="dupliateTasksWithDifferentParams[row.name].inputParams.length === 0"
-                    dense
-                    color="orange"
-                    text-color="white"
-                    label="No params listed"
-                  />
+              <div v-if="Object.hasOwn(dupliateTasksWithDifferentParams, row.name)" @vue:mounted="expandRow(row, rowProps)">
+                <div class="row">
+                  Duplicate task.  Importing will overwrite the existing params below.
                 </div>
-                <div class="column items-end" style="width: 142px; padding-left: 0; padding-right: 0;">
-                  <q-chip
-                    v-for="(param, i) in dupliateTasksWithDifferentParams[row.name].outputParams"
-                    :key="i"
-                    color="purple"
-                    text-color="white"
-                    dense
-                    :label="`${param.name}: ${param.type}`"
-                  />
-                  <q-chip
-                    v-if="dupliateTasksWithDifferentParams[row.name].outputParams.length === 0"
-                    dense
-                    color="orange"
-                    text-color="white"
-                    label="No params listed"
-                  />
+                <div class="row justify-end">
+                  <div class="column items-end">
+                    <q-chip
+                      v-for="(param, i) in dupliateTasksWithDifferentParams[row.name].inputParams"
+                      :key="i"
+                      color="indigo"
+                      text-color="white"
+                      dense
+                    >
+                      {{ `${param.name}` }}
+                      <span v-if="param.required" class="text-red">*</span>
+                      {{ `: ${param.type}` }}
+                    </q-chip>
+                    <q-chip
+                      v-if="dupliateTasksWithDifferentParams[row.name].inputParams.length === 0"
+                      dense
+                      color="orange"
+                      text-color="white"
+                      square
+                      label="No params listed"
+                    />
+                  </div>
+                  <div 
+                    class="column items-end"
+                    :style="{width: outputParamsWidth ? outputParamsWidth + 'px' : '172px',}"
+                  >
+                    <q-chip
+                      v-for="(param, i) in dupliateTasksWithDifferentParams[row.name].outputParams"
+                      :key="i"
+                      color="purple"
+                      text-color="white"
+                      dense
+                      :label="`${param.name}: ${param.type}`"
+                    />
+                    <q-chip
+                      v-if="dupliateTasksWithDifferentParams[row.name].outputParams.length === 0"
+                      dense
+                      color="orange"
+                      text-color="white"
+                      square
+                      label="No params listed"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -164,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import * as api from '@/services/dataApi'
 import TableComponent from '@/components/TableComponent.vue'
 import * as notify from '../notify'
@@ -176,6 +186,10 @@ const showDialog = defineModel()
 
 const existingTasksCopy = ref([])
 
+const tableRef = ref()
+const outputParamsWidth = ref(0)
+const loading = ref(true)
+
 watch(() => showDialog.value, (newVal) => {
   if(newVal) {
     tasks.value = []
@@ -185,6 +199,30 @@ watch(() => showDialog.value, (newVal) => {
     suggestPluginTasks()
   }
 })
+
+function getColumnWidthPxByLabel(label) {
+  const tableEl = (tableRef.value && tableRef.value.$el) || null
+  if (!tableEl) return 0
+  const spans = tableEl.querySelectorAll('.header-label')
+  for (let i = 0; i < spans.length; i++) {
+    const s = spans[i]
+    if ((s.textContent || '').trim() === label) {
+      const th = s.closest('th')
+      if (th && th.getClientRects().length > 0 && th.offsetParent !== null) {
+        // minus 8 to account for the left padding in the table headers
+        return th.getBoundingClientRect().width - 8
+      }
+    }
+  }
+  return 0
+}
+
+function onDialogShow() {
+  // Let QDialog/QTable finish layout in the next frame
+  requestAnimationFrame(() => {
+    outputParamsWidth.value = getColumnWidthPxByLabel("Output Parameters")
+  })
+}
 
 const tasks = ref([])
 const selectedTasks = ref([])
@@ -231,6 +269,7 @@ async function suggestPluginTasks() {
     selectedTasks.value = tasks.value.filter(
       task => !Object.keys(dupliateIdenticalTasks.value).includes(task.name)
     )
+    loading.value = false
   } catch(err) {
     console.warn(err)
     notify.error(err.response.data.message)
@@ -241,8 +280,8 @@ async function suggestPluginTasks() {
 const taskColumns = [
   { name: 'select', label: 'Select', align: 'center', },
   { name: 'name', label: 'Name', align: 'left', field: 'name', sortable: false,  },
-  { name: 'inputParams', label: 'Input Parameters', field: 'inputParams', align: 'right', sortable: false, style: 'width: 150px', },
-  { name: 'outputParams', label: 'Output Parameters', field: 'outputParams', align: 'right', sortable: false, style: 'width: 150px' },
+  { name: 'inputParams', label: 'Input Parameters', field: 'inputParams', align: 'right', sortable: false, style: 'width: 175px', },
+  { name: 'outputParams', label: 'Output Parameters', field: 'outputParams', align: 'right', sortable: false, style: 'width: 175px' },
 ]
 
 async function submit() {
@@ -326,3 +365,12 @@ function deepEqual(obj1, obj2, ignoreKeys = []) {
 
 
 </script>
+
+
+<style scoped>
+  /* make inputParams and outputParams cells top-aligned */
+  :deep(.q-table tbody td:nth-child(3)),
+  :deep(.q-table tbody td:nth-child(4)) {
+    vertical-align: top;
+  }
+</style>
