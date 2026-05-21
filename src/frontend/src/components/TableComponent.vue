@@ -21,6 +21,7 @@
     :rows-per-page-options="props.showAll ? [0] : [5,10,15,20,25,50,0]"
     :hideBottom="props.hideBottom && rows.length > 0"
     :loading="loading"
+    color="primary"
   >
     <template v-slot:header="props">
       <q-tr :props="props">
@@ -109,20 +110,46 @@
                 {{ props.row.description }}
               </q-tooltip>
             </div>
-            <div v-else-if="col.name === 'tags'">
+            <div v-else-if="col.name === 'tags'" class="tag-list-cell">
               <q-chip
-                v-for="(tag, i) in props.row.tags"
+                v-for="(tag, i) in visibleTags(props.row.tags)"
                 :key="i"
                 color="primary" 
                 text-color="white"
                 clickable
                 @click.stop="!props.row.deleted && $emit('editTags', props.row)"
-                class="q-my-none"
               >
-                {{ tag.name.length <= 18 ? tag.name : tag.name.replace(/(.{17})..+/, "$1…") }}
-                <q-tooltip v-if="tag.name.length > 18" max-width="30vw" style="overflow-wrap: break-word">
+                {{ formatTagName(tag) }}
+                <q-tooltip v-if="hasLongTagName(tag)" max-width="30vw" style="overflow-wrap: break-word">
                   {{ tag.name }}
                 </q-tooltip>
+              </q-chip>
+              <q-chip
+                v-if="hiddenTags(props.row.tags).length"
+                outline
+                clickable
+                :color="darkMode ? 'grey-4' : 'grey-7'"
+                @click.stop
+              >
+                +{{ hiddenTags(props.row.tags).length }} more
+
+                <q-menu max-width="300px">
+                  <div class="tag-chip-menu q-pa-sm">
+                    <q-chip
+                      v-for="(tag, i) in hiddenTags(props.row.tags)"
+                      :key="i"
+                      color="primary"
+                      text-color="white"
+                      clickable
+                      @click.stop="!props.row.deleted && $emit('editTags', props.row)"
+                    >
+                      {{ formatTagName(tag) }}
+                      <q-tooltip v-if="hasLongTagName(tag)" max-width="30vw" style="overflow-wrap: break-word">
+                        {{ tag.name }}
+                      </q-tooltip>
+                    </q-chip>
+                  </div>
+                </q-menu>
               </q-chip>
               <q-btn
                 v-if="props.row.deleted !== true"
@@ -137,6 +164,21 @@
             </div>
             <div v-else-if="col.name === 'createdOn' || col.name === 'created_on' || col.name === 'lastModifiedOn'">
               {{ formatDate(col.value) }}
+            </div>
+            <div v-else-if="col.resourceType" class="resource-badge-list-cell">
+              <ResourceBadgeList
+                :resources="Array.isArray(col.value) ? col.value : [col.value]"
+                :resourceType="col.resourceType"
+                @sync="resource => $emit('syncResource', { row: props.row, col, resource })"
+              />
+              <q-btn
+                v-if="col.showResourceAdd && props.row.deleted !== true"
+                round
+                size="sm"
+                icon="add"
+                class="q-ml-xs"
+                @click.stop="$emit('addResource', { row: props.row, col })"
+              />
             </div>
             <div v-else-if="!Array.isArray(col.value)">
               <!-- if value is an array, then render it with a custom slot -->
@@ -222,6 +264,7 @@
   import { useRoute } from 'vue-router'
   import { useLoginStore } from '@/stores/LoginStore'
   import { useQuasar } from 'quasar'
+  import ResourceBadgeList from '@/components/ResourceBadgeList.vue'
   import * as notify from '../notify'
 
   const props = defineProps({
@@ -264,6 +307,11 @@
   preserveSort: {
     type: Boolean,
     default: true
+  },
+  tagLimit: {
+    type: Number,
+    default: 3,
+    validator: (value) => Number.isFinite(value) && value > 0
   }
 })
   const emit = defineEmits([
@@ -272,7 +320,9 @@
     'request', 
     'expand', 
     'editTags', 
-    'create'
+    'create',
+    'syncResource',
+    'addResource'
   ])
 
   const selection =  computed(() => {
@@ -525,7 +575,7 @@
 
 function highlightRow(rowProps) {
     if(rowProps.row.deleted === true) {
-      return darkMode.value ? 'bg-red-8' : 'bg-red-light'
+      return darkMode.value ? 'bg-red-dark-soft' : 'bg-red-light'
     }
     if(props.disabledRowKeys.includes(rowProps.row[props.rowKey])) return
     if(!props.highlightRow) return
@@ -549,9 +599,29 @@ function truncateString(str, limit) {
   return str?.slice(0, limit > 3 ? limit - 3 : limit) + '...'; 
 }
 
+function visibleTags(tags) {
+  return Array.isArray(tags) ? tags.slice(0, props.tagLimit) : []
+}
+
+function hiddenTags(tags) {
+  return Array.isArray(tags) ? tags.slice(props.tagLimit) : []
+}
+
+function hasLongTagName(tag) {
+  return tag.name.length > 18
+}
+
+function formatTagName(tag) {
+  return hasLongTagName(tag) ? tag.name.replace(/(.{17})..+/, "$1…") : tag.name
+}
+
 </script>
 
 <style scoped>
+
+  :deep(.q-table td) {
+    font-size: 14px;
+  }
 
   :deep(.q-table__sort-icon) {
     display: none !important;
@@ -598,6 +668,28 @@ function truncateString(str, limit) {
   :deep(.q-table__middle table) {
     border-collapse: collapse;
     border-spacing: 0;
+  }
+
+  .tag-chip-menu {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 300px;
+  }
+
+  .tag-list-cell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .resource-badge-list-cell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .resource-badge-list-cell :deep(.resource-badge-list) {
+    display: contents;
   }
 
 </style>

@@ -6,7 +6,7 @@
     subtitle="Parameterized executions of Entrypoints"
   />
   <TableComponent 
-    :rows="jobs"
+    :rows="rows"
     :columns="columns"
     title="Jobs"
     v-model:selected="selected"
@@ -24,24 +24,6 @@
     :hideCreateBtn="route.name === 'experimentJobs' && experiment?.deleted"
     :defaultSort="{sortBy: 'id', descending: true}"
   >
-    <template #body-cell-experiment="props">
-      <ResourceBadge
-        :resource="props.row.experiment"
-        resourceType="experiment"
-      />
-    </template>
-    <template #body-cell-entrypoint="props">
-      <ResourceBadge
-        :resource="props.row.entrypoint"
-        resourceType="entrypoint"
-      />
-    </template>
-    <template #body-cell-queue="props">
-      <ResourceBadge
-        :resource="props.row.queue"
-        resourceType="queue"
-      />
-    </template>
     <template #body-cell-status="props">
       <JobStatus :status="props.row.status" />
     </template>
@@ -49,7 +31,7 @@
 
   <DeleteDialog 
     v-model="showDeleteDialog"
-    @submit="deleteJob"
+    @submit="deleteRow"
     type="Job"
     :name="selected[0]?.description || `Job ID: ${selected[0]?.id}`"
   />
@@ -81,7 +63,7 @@
   import ArtifactsDialog from '@/dialogs/ArtifactsDialog.vue'
   import AssignTagsDialog from '@/dialogs/AssignTagsDialog.vue'
   import JobStatus from '@/components/JobStatus.vue'
-  import ResourceBadge from '@/components/ResourceBadge.vue'
+  import { useTableUtils } from '@/services/useTableUtils'
 
   const openWindow = window
   const route = useRoute()
@@ -89,8 +71,8 @@
 
   const columns = [
     { name: 'id', label: 'ID', align: 'left', field: 'id', sortable: true, },
-    { name: 'entrypoint', label: 'Entrypoint', align: 'left', field: 'entrypoint', sortable: true, },
-    { name: 'queue', label: 'Queue', align: 'left', field: 'queue', sortable: true, },
+    { name: 'entrypoint', label: 'Entrypoint', align: 'left', field: 'entrypoint', sortable: true, resourceType: 'entrypoint' },
+    { name: 'queue', label: 'Queue', align: 'left', field: 'queue', sortable: true, resourceType: "queue" },
     { name: 'description', label: 'Description', align: 'left', field: 'description', sortable: true, style: 'width: 275px',},
     { name: 'status', label: 'Status', align: 'left', field: 'status', sortable: true },
     { name: 'tags', label: 'Tags', align: 'left', field: 'tags', sortable: false, },
@@ -99,15 +81,9 @@
 
   if(route.name === 'allJobs') {
     columns.splice(2, 0, 
-      { name: 'experiment', label: 'Experiment', align: 'left', field: 'experiment', sortable: true, }
+      { name: 'experiment', label: 'Experiment', align: 'left', field: 'experiment', sortable: true, resourceType: "experiment" }
     )
   }
-
-  const artifactColumns = [
-    { name: 'id', label: 'id', align: 'left', field: 'id', sortable: true, },
-  ]
-
-  const selected = ref([])
 
   const title = ref('')
 
@@ -128,61 +104,39 @@
     } 
   }
 
-  const jobs = ref([])
-
-  const isLoading = ref(false)
-
-  const tableRef = ref(null)
+  const {
+    rows,
+    isLoading,
+    showDeleted,
+    tableRef,
+    selected,
+    showDeleteDialog,
+    getData,
+    deleteRow,
+  } = useTableUtils('jobs')
 
 async function getJobs(pagination, showDrafts) {
-    isLoading.value = true
-    const minLoadTimePromise = new Promise(resolve => setTimeout(resolve, 300));
-
     try {
-      let res
       if(route.name === 'experimentJobs') {
-        [res] = await Promise.all([
-          api.getJobs(route.params.id, pagination, showDrafts),
-          minLoadTimePromise
-        ]);
+        isLoading.value = true
+        const res = await api.getJobs(route.params.id, pagination, showDrafts)
+        rows.value = res.data.data
+        tableRef.value?.updateTotalRows(res.data.totalNumResults)
+        isLoading.value = false;
       } else if(route.name === 'allJobs') {
-        [res] = await Promise.all([
-          api.getData('jobs', pagination, false),
-          minLoadTimePromise
-        ]);
-      } else {
-        await minLoadTimePromise;
-        return;
+        await getData(pagination, showDrafts)
       }
-      jobs.value = res.data.data
-      tableRef.value.updateTotalRows(res.data.totalNumResults)
     } catch(err) {
       console.log('err = ', err)
       notify.error(err.response.data.message)
-    } finally {
-      isLoading.value = false;
     }
   }
 
-  const showDeleteDialog = ref(false)
   const showArtifactsDialog = ref(false)
   const showTagsDialog = ref(false)
   const editObjTags = ref({})
 
   const jobId = ref('')
-
-  async function deleteJob() {
-    try {
-      const jobId = JSON.parse(JSON.stringify(selected.value[0].id))
-      await api.deleteItem('jobs', selected.value[0].id)
-      notify.success(`Successfully deleted job ${jobId}`)
-      showDeleteDialog.value = false
-      selected.value = []
-      tableRef.value.refreshTable()
-    } catch(err) {
-      notify.error(err.response.data.message);
-    }
-  }
 
   function pushToJobRoute() {
     if(route.name === 'experimentJobs') {

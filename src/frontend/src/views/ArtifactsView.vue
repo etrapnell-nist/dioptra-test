@@ -5,7 +5,7 @@
     subtitle="Stored output objects from Jobs" 
   />
   <TableComponent
-    :rows="artifacts"
+    :rows="rows"
     :columns="columns"
     title="Artifacts"
     v-model:selected="selected"
@@ -14,19 +14,13 @@
       : router.push(`/artifacts/${selected[0].id}`)
     )"
     @delete="showDeleteDialog = true"
-    @request="getArtifacts"
+    @request="getData"
     ref="tableRef"
     :hideCreateBtn="true"
     :hideDeleteBtn="true"
     :loading="isLoading"
     :defaultSort="{sortBy: 'id', descending: true}"
   >
-    <template #body-cell-job="props">
-      <ResourceBadge
-        :resource="{name: `Job ${props.row.job}`, url: `/jobs/${props.row.job}`, id: props.row.job}"
-        resourceType="job"
-      />
-    </template>
     <template #body-cell-taskName="props">
       {{ props.row.task.name }}
     </template>
@@ -81,53 +75,42 @@ import * as notify from '../notify'
 import PageTitle from '@/components/PageTitle.vue'
 import AssignTagsDialog from '@/dialogs/AssignTagsDialog.vue'
 import { useRouter } from 'vue-router'
-import ResourceBadge from '@/components/ResourceBadge.vue'
+import { useTableUtils } from '@/services/useTableUtils'
 
 const openWindow = window
 const router = useRouter()
 
-const selected = ref([])
 const editing = ref(false)
 
 const showAddEditDialog = ref(false)
-const showDeleteDialog = ref(false)
 const showTagsDialog = ref(false)
 
 watch(showAddEditDialog, (newVal) => {
   if(!newVal) editing.value = false
 })
 
-const artifacts = ref([])
+const {
+  rows,
+  isLoading,
+  showDeleted,
+  tableRef,
+  selected,
+  showDeleteDialog,
+  getData,
+  deleteRow,
+} = useTableUtils('artifacts')
 
-const isLoading = ref(false)
-
-async function getArtifacts(pagination) {
-  isLoading.value = true
-  const minLoadTimePromise = new Promise(resolve => setTimeout(resolve, 300)); 
-  if(!pagination.sortBy) {
-    pagination.sortBy = 'job'
-    pagination.descending = true
-  }
-  try {
-    const [res] = await Promise.all([
-      api.getData('artifacts', pagination),
-      minLoadTimePromise
-    ]);
-    
-    artifacts.value = res.data.data
-    tableRef.value.updateTotalRows(res.data.totalNumResults)
-  } catch(err) {
-    console.log('err = ', err);
-    notify.error(err.response.data.message);
-  } finally {
-    isLoading.value = false;
-  }
-}
 
 const columns = [
   { name: 'id', label: 'ID', align: 'left', field: 'id', sortable: true, },
   { name: 'description', label: 'Description', field: 'description', align: 'left', sortable: true },
-  { name: 'job', label: 'Job', align: 'left' },
+  { name: 'job', label: 'Job', align: 'left', resourceType: "job",     
+    field: row => ({
+      name: `Job ${row.job}`,
+      url: `/jobs/${row.job}`,
+      id: row.job,
+    }),
+  },
   { name: 'taskName', label: 'Task Name', align: 'left' },
   { name: 'taskOutputParams', label: 'Task Output Params', align: 'left' },
   { name: 'lastModifiedOn', label: 'Last Modified', align: 'left', field: 'lastModifiedOn', sortable: true },
@@ -161,13 +144,6 @@ async function deleteModel() {
   }
 }
 
-const fileColumns = [
-  { name: 'versionNumber', label: 'versionNumber', align: 'left', field: 'versionNumber', sortable: true, },
-  { name: 'url', label: 'URL', align: 'left', field: 'url', sortable: true, },
-]
-
-const tableRef = ref(null)
-
 async function updateArtifact(id, description) {
   try {
     await api.updateItem('artifacts', id, { description })
@@ -181,11 +157,6 @@ async function updateArtifact(id, description) {
 }
 
 const editObjTags = ref({})
-
-function handleTags(obj) {
-  editObjTags.value = obj
-  showTagsDialog.value = true
-}
 
 async function submitTags(selectedTagIDs) {
   showTagsDialog.value = false
